@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Package, MapPin, Search, Truck, Shield, Clock, ChevronRight, Phone, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Link } from "react-router-dom";
 import heroCourier from "@/assets/hero-courier.jpg";
 
 const services = [
@@ -48,8 +49,8 @@ const Index = () => {
             <a href="#services" className="hover:text-secondary transition-colors">Services</a>
             <a href="#contact" className="hover:text-secondary transition-colors">Contact</a>
           </div>
-          <Button size="sm" className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-heading font-semibold">
-            Book Now
+          <Button size="sm" className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-heading font-semibold" asChild>
+            <Link to="/book">Book Now</Link>
           </Button>
         </div>
       </nav>
