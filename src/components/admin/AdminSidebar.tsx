@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, Package, TrendingUp, MapPin, ChevronLeft } from "lucide-react";
+import { LayoutDashboard, Users, Package, TrendingUp,BadgeDollarSign, MapPin, ChevronLeft, DollarSign, Car } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import {
@@ -19,7 +19,10 @@ const navItems = [
   { title: "Overview", url: "/admin", icon: LayoutDashboard },
   { title: "Shipments", url: "/admin/shipments", icon: Package },
   { title: "Riders", url: "/admin/riders", icon: Users },
+  { title: "Fleet", url: "/admin/fleet", icon: Car },
   { title: "Analytics", url: "/admin/analytics", icon: TrendingUp },
+  { title: "Pricing", url: "/admin/pricing", icon: DollarSign },
+  { title: "Earnings",  url: "/admin/earnings",    icon: BadgeDollarSign  },
 ];
 
 const countries = [
@@ -82,6 +85,7 @@ export function AdminSidebar() {
                   <div key={c.name} className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-sidebar-foreground">
                     <span>{c.flag}</span>
                     <span>{c.name}</span>
+                    
                   </div>
                 ))}
               </div>
@@ -96,6 +100,7 @@ export function AdminSidebar() {
             <ChevronLeft className="h-3 w-3" />
             Back to Customer Portal
           </NavLink>
+          
         )}
       </SidebarFooter>
     </Sidebar>

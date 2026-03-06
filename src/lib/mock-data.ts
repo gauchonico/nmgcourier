@@ -76,3 +76,257 @@ export const countryStats = [
   { country: "Uganda" as Country, flag: "🇺🇬", currency: "UGX", totalShipments: 2089, activeRiders: 24, revenue: 2408000, growth: 18.7 },
   { country: "Tanzania" as Country, flag: "🇹🇿", currency: "TZS", totalShipments: 956, activeRiders: 12, revenue: 1631000, growth: 8.2 },
 ];
+
+import { supabase } from "./supabase";
+// ── Shipments ──────────────────────────────────────────
+export async function fetchShipments() {
+  const { data, error } = await supabase
+    .from("shipments")
+    .select("*")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return data as Shipment[];
+}
+
+export async function fetchShipmentByTrackingId(trackingId: string) {
+  const { data, error } = await supabase
+    .from("shipments")
+    .select("*")
+    .eq("tracking_id", trackingId)
+    .single();
+  if (error) return null;
+  return data as Shipment;
+}
+
+export async function insertShipment(shipment: {
+  id: string;
+  tracking_id: string;
+  sender: string;
+  receiver: string;
+  origin: string;
+  destination: string;
+  country: Country;
+  pickup_country: string;
+  dropoff_country: string;
+  is_cross_border: boolean;
+  status: ShipmentStatus;
+  rider?: string;
+  weight: number;
+  price: number;
+  created_at: string;
+}) {
+  const { data, error } = await supabase
+    .from("shipments")
+    .insert(shipment)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateShipmentStatus(id: string, status: ShipmentStatus) {
+  const { error } = await supabase
+    .from("shipments")
+    .update({ status })
+    .eq("id", id);
+  if (error) throw error;
+}
+// ── Riders ─────────────────────────────────────────────
+export async function fetchRiders() {
+  const { data, error } = await supabase
+    .from("riders")
+    .select("*")
+    .order("name");
+  if (error) throw error;
+  return data as Rider[];
+}
+
+export async function updateRiderAvailability(id: string, isAvailable: boolean) {
+  const { error } = await supabase
+    .from("riders")
+    .update({ is_available: isAvailable })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+// ── Quotes ─────────────────────────────────────────────
+export async function insertQuote(quote: {
+  pickup_location: string;
+  dropoff_location: string;
+  weight: number;
+  vehicle_type: string;
+  estimated_price: number;
+}) {
+  const { data, error } = await supabase
+    .from("quotes")
+    .insert(quote)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// ── Pricing ────────────────────────────────────────────
+export async function fetchInlandPrice(country: Country, vehicleType: VehicleType) {
+  const { data, error } = await supabase
+    .from("pricing_inland")
+    .select("*")
+    .eq("country", country)
+    .eq("vehicle_type", vehicleType)
+    .single();
+  if (error) return null;
+  return data;
+}
+
+export async function fetchCrossBorderPrice(
+  fromCountry: Country,
+  toCountry: Country,
+  vehicleType: VehicleType
+) {
+  const { data, error } = await supabase
+    .from("pricing_crossborder")
+    .select("*")
+    .eq("from_country", fromCountry)
+    .eq("to_country", toCountry)
+    .eq("vehicle_type", vehicleType)
+    .single();
+  if (error) return null;
+  return data;
+}
+
+export async function assignRider(id: string, riderName: string) {
+  const { error } = await supabase
+    .from("shipments")
+    .update({ rider: riderName })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function insertRider(rider: {
+  id: string;
+  name: string;
+  phone: string;
+  vehicle: VehicleType;
+  country: Country;
+  city: string;
+  is_available: boolean;
+  total_deliveries: number;
+  rating: number;
+  earnings: number;
+}) {
+  const { data, error } = await supabase
+    .from("riders")
+    .insert(rider)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// ── Rider Profile ──────────────────────────────────────
+export async function fetchRiderById(id: string) {
+  const { data, error } = await supabase
+    .from("riders")
+    .select("*")
+    .eq("id", id)
+    .single();
+  if (error) return null;
+  return data;
+}
+
+export async function fetchShipmentsByRider(riderName: string) {
+  const { data, error } = await supabase
+    .from("shipments")
+    .select("*")
+    .eq("rider", riderName)
+    .order("created_at", { ascending: false });
+  if (error) return [];
+  return data;
+}
+
+// ── Earnings Config ────────────────────────────────────
+export async function fetchEarningsConfig() {
+  const { data, error } = await supabase
+    .from("earnings_config")
+    .select("*")
+    .single();
+  if (error) return null;
+  return data;
+}
+
+export async function updateEarningsConfig(id: string, percentage: number) {
+  const { error } = await supabase
+    .from("earnings_config")
+    .update({ percentage, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function updateRiderEarnings(id: string, earnings: number, totalDeliveries: number) {
+  const { error } = await supabase
+    .from("riders")
+    .update({ earnings, total_deliveries: totalDeliveries })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+// ── Fleet ──────────────────────────────────────────────
+export async function fetchVehicles() {
+  const { data, error } = await supabase
+    .from("vehicles")
+    .select("*, riders(name)")
+    .order("country")
+    .order("type");
+  if (error) throw error;
+  return data;
+}
+
+export async function insertVehicle(vehicle: {
+  plate: string;
+  type: string;
+  country: string;
+  city: string;
+  fuel_litres: number;
+  fuel_capacity: number;
+  status: string;
+  make: string;
+  model: string;
+  year: number;
+  rider_id?: string | null;
+}) {
+  const { data, error } = await supabase
+    .from("vehicles")
+    .insert(vehicle)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updateVehicle(id: string, updates: Partial<{
+  plate: string;
+  type: string;
+  country: string;
+  city: string;
+  fuel_litres: number;
+  fuel_capacity: number;
+  status: string;
+  make: string;
+  model: string;
+  year: number;
+  rider_id: string | null;
+}>) {
+  const { error } = await supabase
+    .from("vehicles")
+    .update(updates)
+    .eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteVehicle(id: string) {
+  const { error } = await supabase
+    .from("vehicles")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+}
