@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Link } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { useSearchParams } from "react-router-dom";
-import { insertShipment, fetchInlandPrice, fetchCrossBorderPrice } from "@/lib/mock-data";
+import { apiGetAreas, apiCreateShipment, apiGetInlandPricing, apiGetCrossBorderPricing } from "@/lib/api";
 import type { Country, VehicleType, ShipmentStatus } from "@/lib/mock-data";
 
 const countryOptions: { value: Country; label: string; flag: string }[] = [
@@ -109,8 +109,8 @@ useEffect(() => {
     if (!pickupCountry) { setPickupAreas([]); return; }
     setPickupAreasLoading(true);
     setPickupAreaId("");
-    supabase.from("areas").select("*").eq("country", pickupCountry).order("name")
-      .then(({ data }) => { setPickupAreas((data as Area[]) || []); setPickupAreasLoading(false); });
+    apiGetAreas(pickupCountry)
+      .then((data) => { setPickupAreas(data || []); setPickupAreasLoading(false); });
   }, [pickupCountry]);
 
   // Load dropoff areas
@@ -118,8 +118,8 @@ useEffect(() => {
     if (!dropoffCountry) { setDropoffAreas([]); return; }
     setDropoffAreasLoading(true);
     setDropoffAreaId("");
-    supabase.from("areas").select("*").eq("country", dropoffCountry).order("name")
-      .then(({ data }) => { setDropoffAreas((data as Area[]) || []); setDropoffAreasLoading(false); });
+    apiGetAreas(dropoffCountry)
+      .then((data) => { setDropoffAreas(data || []); setDropoffAreasLoading(false); });
   }, [dropoffCountry]);
 
   // Recalculate price whenever relevant fields change
@@ -134,7 +134,7 @@ useEffect(() => {
       setPriceLoading(true);
       try {
         if (isCrossBorder) {
-          const pricing = await fetchCrossBorderPrice(
+          const pricing = await apiGetCrossBorderPricing(
             pickupCountry as Country,
             dropoffCountry as Country,
             vehicleType as VehicleType
@@ -151,7 +151,7 @@ useEffect(() => {
             isCrossBorder: true,
           });
         } else {
-          const pricing = await fetchInlandPrice(
+          const pricing = await apiGetInlandPricing(
             pickupCountry as Country,
             vehicleType as VehicleType
           );
@@ -195,7 +195,7 @@ useEffect(() => {
     const id = generateTrackingId(pickupCountry as Country);
 
     try {
-      await insertShipment({
+      await apiCreateShipment({
         id: crypto.randomUUID(),
         tracking_id: id,
         sender: senderName,

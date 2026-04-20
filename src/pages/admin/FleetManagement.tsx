@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { fetchVehicles, insertVehicle, updateVehicle, deleteVehicle, fetchRiders } from "@/lib/mock-data";
+import { apiGetVehicles, apiCreateVehicle, apiUpdateVehicle, apiDeleteVehicle, apiGetRiders } from "@/lib/api";
 import { motion as m } from "framer-motion";
 
 type VehicleStatus = "available" | "on_trip" | "maintenance";
@@ -56,7 +56,7 @@ export default function FleetManagement() {
 
   const load = async () => {
     setLoading(true);
-    const [v, r] = await Promise.all([fetchVehicles(), fetchRiders()]);
+    const [v, r] = await Promise.all([apiGetVehicles(), apiGetRiders()]);
     setVehicles(v);
     setRiders(r);
     setLoading(false);
@@ -115,10 +115,10 @@ export default function FleetManagement() {
         year: Number(form.year),
       };
       if (editingId) {
-        await updateVehicle(editingId, payload);
+        await apiUpdateVehicle(editingId, payload);
         toast({ title: "Vehicle updated!", description: `${form.plate} has been updated.` });
       } else {
-        await insertVehicle(payload);
+        await apiCreateVehicle(payload);
         toast({ title: "Vehicle added!", description: `${form.plate} added to fleet.` });
       }
       closePanel();
@@ -132,8 +132,8 @@ export default function FleetManagement() {
 
   const handleDelete = async (id: string) => {
     try {
-      await deleteVehicle(id);
-      toast({ title: "Vehicle removed", description: "Vehicle has been deleted from the fleet." });
+      await apiDeleteVehicle(id);
+      toast({ title: "Vehicle removed", description: "Vehicle deleted from fleet." });
       setDeleteConfirm(null);
       load();
     } catch (err: any) {
@@ -237,9 +237,9 @@ export default function FleetManagement() {
                         <Badge variant="outline" className="text-[10px]">{v.type}</Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge className={`text-[10px] ${statusColors[v.status as VehicleStatus]}`}>
-                          {statusLabels[v.status as VehicleStatus]}
-                        </Badge>
+                      <Badge className={`text-[10px] ${statusColors[v.status as VehicleStatus] ?? "bg-muted text-muted-foreground"}`}>
+                        {statusLabels[v.status as VehicleStatus] ?? v.status}
+                      </Badge>
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -406,15 +406,21 @@ export default function FleetManagement() {
                       <SelectContent>
                         <SelectItem value="none">— Unassigned —</SelectItem>
                         {riders
-                          .filter((r) => r.country === form.country)
+                          .filter((r) =>
+                            r.country === form.country &&        // same country as vehicle
+                            (!r.on_job || r.id === form.rider_id) // available, or already assigned to this vehicle
+                          )
                           .map((r) => (
                             <SelectItem key={r.id} value={r.id}>
                               {r.name} · {r.vehicle} · {r.city}
+                              {r.on_job ? " ● On Job" : " ● Available"}
                             </SelectItem>
                           ))}
                       </SelectContent>
                     </Select>
-                    <p className="text-xs text-muted-foreground">Showing riders from {form.country}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Only available riders from {form.country} — vehicles are shared, assignment is per trip
+                    </p>
                   </div>
                 </div>
 

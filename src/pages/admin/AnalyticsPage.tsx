@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line, PieChart, Pie, Cell } from "recharts";
 import { revenueByCountry } from "@/lib/mock-data";
-import { fetchShipments, fetchRiders } from "@/lib/mock-data";
+import { apiGetShipments, apiGetRiders } from "@/lib/api";
 import { motion } from "framer-motion";
 
 const chartConfig = {
@@ -29,45 +29,42 @@ const currency: Record<string, string> = {
 
 export default function AnalyticsPage() {
   const [shipments, setShipments] = useState<any[]>([]);
-  const [riders, setRiders] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [riders,    setRiders]    = useState<any[]>([]);
+  const [loading,   setLoading]   = useState(true);
 
   useEffect(() => {
-    Promise.all([fetchShipments(), fetchRiders()])
+    Promise.all([apiGetShipments(), apiGetRiders()])
       .then(([s, r]) => { setShipments(s); setRiders(r); })
       .finally(() => setLoading(false));
   }, []);
 
-  // Pie data — shipments by country
   const pieData = ["Kenya", "Uganda", "Tanzania"].map((c) => ({
-    name: c,
+    name:  c,
     value: shipments.filter((s) => s.country === c).length,
-    fill: countryColors[c],
+    fill:  countryColors[c],
   }));
 
-  // Top riders by total_deliveries
   const riderPerformance = [...riders]
     .sort((a, b) => b.total_deliveries - a.total_deliveries)
     .slice(0, 5)
     .map((r) => ({
-      name: r.name.split(" ")[0],
+      name:       r.name.split(" ")[0],
       deliveries: r.total_deliveries,
-      earnings: r.earnings,
-      rating: r.rating,
+      earnings:   r.earnings,
+      rating:     r.rating,
     }));
 
-  // Country stats from live data
   const countryStats = ["Kenya", "Uganda", "Tanzania"].map((c) => {
-    const countryShipments = shipments.filter((s) => s.country === c);
-    const countryRiders = riders.filter((r) => r.country === c);
-    const revenue = countryShipments.reduce((sum, s) => sum + (s.price || 0), 0);
+    const cs      = shipments.filter((s) => s.country === c);
+    const cr      = riders.filter((r) => r.country === c);
+    const revenue = cs.reduce((sum, s) => sum + (parseFloat(s.price) || 0), 0);
     return {
-      country: c,
-      flag: countryFlag[c],
-      currency: currency[c],
-      totalShipments: countryShipments.length,
-      activeRiders: countryRiders.filter((r) => r.is_available).length,
-      totalRiders: countryRiders.length,
+      country:        c,
+      flag:           countryFlag[c],
+      currency:       currency[c],
+      totalShipments: cs.length,
+      activeRiders:   cr.filter((r) => r.is_available).length,
+      totalRiders:    cr.length,
       revenue,
     };
   });
@@ -81,7 +78,7 @@ export default function AnalyticsPage() {
         <p className="text-sm text-muted-foreground mt-1">Financial performance and operational insights</p>
       </div>
 
-      {/* Revenue Trend — still uses mock monthly data as we don't have monthly breakdown yet */}
+      {/* Revenue Trend */}
       <Card className="shadow-card">
         <CardHeader>
           <CardTitle className="text-lg">Revenue Trend</CardTitle>
@@ -141,22 +138,17 @@ export default function AnalyticsPage() {
         </Card>
       </div>
 
-      {/* Live Country Performance */}
+      {/* Country Performance */}
       <Card className="shadow-card">
         <CardHeader>
           <CardTitle className="text-lg">Country Performance Summary</CardTitle>
-          <CardDescription>Live data from Supabase</CardDescription>
+          <CardDescription>Live data from Laravel API</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {countryStats.map((cs, i) => (
-              <motion.div
-                key={cs.country}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.1 }}
-                className="p-4 rounded-lg border border-border bg-muted/30 space-y-3"
-              >
+              <motion.div key={cs.country} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}
+                className="p-4 rounded-lg border border-border bg-muted/30 space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="font-heading font-bold text-foreground flex items-center gap-2">
                     <span className="text-xl">{cs.flag}</span> {cs.country}

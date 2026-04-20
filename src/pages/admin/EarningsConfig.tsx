@@ -6,19 +6,19 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { fetchEarningsConfig, updateEarningsConfig } from "@/lib/mock-data";
+import { apiGetEarningsConfig, apiUpdateEarningsConfig } from "@/lib/api";
 
 export default function EarningsConfig() {
   const { toast } = useToast();
-  const [config, setConfig] = useState<any>(null);
+  const [config,     setConfig]     = useState<any>(null);
   const [percentage, setPercentage] = useState<number>(20);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [loading,    setLoading]    = useState(true);
+  const [saving,     setSaving]     = useState(false);
 
   useEffect(() => {
-    fetchEarningsConfig().then((c) => {
+    apiGetEarningsConfig().then((c) => {
       setConfig(c);
-      setPercentage(c?.percentage || 20);
+      setPercentage(parseFloat(c?.percentage) || 20);
       setLoading(false);
     });
   }, []);
@@ -31,7 +31,7 @@ export default function EarningsConfig() {
     }
     setSaving(true);
     try {
-      await updateEarningsConfig(config.id, percentage);
+      await apiUpdateEarningsConfig(config.id, percentage);
       toast({ title: "Saved!", description: `Rider earnings updated to ${percentage}%.` });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
@@ -66,10 +66,7 @@ export default function EarningsConfig() {
                   <Label>Commission Percentage (%)</Label>
                   <div className="flex items-center gap-3">
                     <Input
-                      type="number"
-                      min={1}
-                      max={100}
-                      value={percentage}
+                      type="number" min={1} max={100} value={percentage}
                       onChange={(e) => setPercentage(parseFloat(e.target.value))}
                       className="max-w-[120px] text-lg font-bold"
                     />
@@ -90,17 +87,13 @@ export default function EarningsConfig() {
                   ))}
                 </div>
 
-                {/* Info */}
                 <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted rounded-lg p-3">
                   <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
                   <p>Earnings are calculated and updated automatically when a shipment status is changed to <strong>Delivered</strong> in the Shipment Board.</p>
                 </div>
 
-                <Button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="w-full bg-secondary text-secondary-foreground hover:bg-secondary/90 font-heading font-semibold"
-                >
+                <Button onClick={handleSave} disabled={saving}
+                  className="w-full bg-secondary text-secondary-foreground hover:bg-secondary/90 font-heading font-semibold">
                   <Save className="h-4 w-4 mr-2" />
                   {saving ? "Saving..." : "Save Commission Rate"}
                 </Button>

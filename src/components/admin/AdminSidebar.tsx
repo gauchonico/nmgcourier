@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, Package, TrendingUp,BadgeDollarSign, MapPin, ChevronLeft, DollarSign, Car } from "lucide-react";
+import { LayoutDashboard, Users, Package, TrendingUp,BadgeDollarSign, MapPin, ChevronLeft, DollarSign, Car, Search } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
 import {
@@ -18,9 +18,11 @@ import {
 const navItems = [
   { title: "Overview", url: "/admin", icon: LayoutDashboard },
   { title: "Shipments", url: "/admin/shipments", icon: Package },
+  { title: "Manage",     url: "/admin/manage",    icon: Search},
   { title: "Riders", url: "/admin/riders", icon: Users },
   { title: "Fleet", url: "/admin/fleet", icon: Car },
   { title: "Analytics", url: "/admin/analytics", icon: TrendingUp },
+  { title: "Areas",      url: "/admin/areas",     icon: MapPin},
   { title: "Pricing", url: "/admin/pricing", icon: DollarSign },
   { title: "Earnings",  url: "/admin/earnings",    icon: BadgeDollarSign  },
 ];

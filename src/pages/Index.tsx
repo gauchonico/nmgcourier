@@ -7,9 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Link, useNavigate } from "react-router-dom";
 import heroCourier from "@/assets/hero-courier.jpg";
-import { fetchShipmentByTrackingId } from "@/lib/mock-data";
-import { fetchInlandPrice, fetchCrossBorderPrice } from "@/lib/mock-data";
-import { supabase } from "@/lib/supabase";
+import { apiTrackShipment, apiGetAreas, apiGetInlandPricing, apiGetCrossBorderPricing } from "@/lib/api";
 
 const services = [
   { icon: Truck,  title: "Same-Day Delivery",  description: "Fast delivery across Kampala and surrounding areas within hours." },
@@ -19,7 +17,7 @@ const services = [
 
 const statusSteps = ["Pending", "Picked Up", "In Transit", "Out for Delivery", "Delivered"];
 
-type Country    = "Kenya" | "Uganda" | "Tanzania";
+type Country     = "Kenya" | "Uganda" | "Tanzania";
 type VehicleType = "Bike" | "Van" | "Truck";
 
 const countryOptions: { value: Country; label: string; flag: string }[] = [
@@ -29,9 +27,9 @@ const countryOptions: { value: Country; label: string; flag: string }[] = [
 ];
 
 const vehicleOptions: { value: VehicleType; label: string; desc: string }[] = [
-  { value: "Bike",  label: "Bike",  desc: "Up to 10kg"   },
-  { value: "Van",   label: "Van",   desc: "Up to 100kg"  },
-  { value: "Truck", label: "Truck", desc: "100kg+"       },
+  { value: "Bike",  label: "Bike",  desc: "Up to 10kg"  },
+  { value: "Van",   label: "Van",   desc: "Up to 100kg" },
+  { value: "Truck", label: "Truck", desc: "100kg+"      },
 ];
 
 interface Area {
@@ -47,10 +45,10 @@ const Index = () => {
   const navigate = useNavigate();
 
   // Tracking
-  const [trackingId, setTrackingId]         = useState("");
+  const [trackingId,      setTrackingId]      = useState("");
   const [trackedShipment, setTrackedShipment] = useState<any>(null);
-  const [trackingError, setTrackingError]   = useState("");
-  const [isTracking, setIsTracking]         = useState(false);
+  const [trackingError,   setTrackingError]   = useState("");
+  const [isTracking,      setIsTracking]      = useState(false);
 
   // Quote
   const [pickupCountry,  setPickupCountry]  = useState<Country | "">("");
@@ -74,16 +72,16 @@ const Index = () => {
   useEffect(() => {
     if (!pickupCountry) { setPickupAreas([]); setPickupAreaId(""); return; }
     setPickupLoading(true); setPickupAreaId("");
-    supabase.from("areas").select("*").eq("country", pickupCountry).order("name")
-      .then(({ data }) => { setPickupAreas((data as Area[]) || []); setPickupLoading(false); });
+    apiGetAreas(pickupCountry)
+      .then((data) => { setPickupAreas(data || []); setPickupLoading(false); });
   }, [pickupCountry]);
 
   // Load dropoff areas
   useEffect(() => {
     if (!dropoffCountry) { setDropoffAreas([]); setDropoffAreaId(""); return; }
     setDropoffLoading(true); setDropoffAreaId("");
-    supabase.from("areas").select("*").eq("country", dropoffCountry).order("name")
-      .then(({ data }) => { setDropoffAreas((data as Area[]) || []); setDropoffLoading(false); });
+    apiGetAreas(dropoffCountry)
+      .then((data) => { setDropoffAreas(data || []); setDropoffLoading(false); });
   }, [dropoffCountry]);
 
   // Live price calculation
@@ -96,22 +94,47 @@ const Index = () => {
       setPriceLoading(true);
       try {
         if (isCrossBorder) {
-          const pricing = await fetchCrossBorderPrice(pickupCountry as Country, dropoffCountry as Country, vehicleType as VehicleType);
+          const pricing = await apiGetCrossBorderPricing(pickupCountry, dropoffCountry, vehicleType);
           if (!pricing) { setPriceBreakdown(null); return; }
-          const weightFee = pricing.per_kg_rate * w;
-          setPriceBreakdown({ baseFee: pricing.base_fee, weightFee: Math.round(weightFee), zoneMultiplier: 1, total: Math.round(pricing.base_fee + weightFee), currency: pricing.currency, isCrossBorder: true });
+          const weightFee = parseFloat(pricing.per_kg_rate) * w;
+          setPriceBreakdown({
+            baseFee: parseFloat(pricing.base_fee), weightFee: Math.round(weightFee),
+            zoneMultiplier: 1, total: Math.round(parseFloat(pricing.base_fee) + weightFee),
+            currency: pricing.currency, isCrossBorder: true,
+          });
         } else {
-          const pricing = await fetchInlandPrice(pickupCountry as Country, vehicleType as VehicleType);
+          const pricing = await apiGetInlandPricing(pickupCountry, vehicleType);
           if (!pricing) { setPriceBreakdown(null); return; }
-          const multiplierMap: Record<string, number> = { city: pricing.zone_multiplier_city, suburb: pricing.zone_multiplier_suburb, upcountry: pricing.zone_multiplier_upcountry };
+          const multiplierMap: Record<string, number> = {
+            city:      parseFloat(pricing.zone_multiplier_city),
+            suburb:    parseFloat(pricing.zone_multiplier_suburb),
+            upcountry: parseFloat(pricing.zone_multiplier_upcountry),
+          };
           const multiplier = multiplierMap[dropoffArea?.zone || "city"] || 1;
-          const weightFee  = pricing.per_kg_rate * w;
-          setPriceBreakdown({ baseFee: pricing.base_fee, weightFee: Math.round(weightFee), zoneMultiplier: multiplier, total: Math.round((pricing.base_fee + weightFee) * multiplier), currency: pricing.currency, isCrossBorder: false });
+          const weightFee  = parseFloat(pricing.per_kg_rate) * w;
+          setPriceBreakdown({
+            baseFee: parseFloat(pricing.base_fee), weightFee: Math.round(weightFee),
+            zoneMultiplier: multiplier,
+            total: Math.round((parseFloat(pricing.base_fee) + weightFee) * multiplier),
+            currency: pricing.currency, isCrossBorder: false,
+          });
         }
       } finally { setPriceLoading(false); }
     };
     calculate();
   }, [vehicleType, weight, pickupCountry, dropoffCountry, dropoffArea, isCrossBorder]);
+
+  const handleTrack = async () => {
+    if (!trackingId.trim()) return;
+    setIsTracking(true); setTrackingError(""); setTrackedShipment(null);
+    try {
+      const result = await apiTrackShipment(trackingId.trim());
+      setTrackedShipment(result);
+    } catch {
+      setTrackingError("No shipment found with that tracking ID.");
+    }
+    setIsTracking(false);
+  };
 
   const handleBookNow = () => {
     const params = new URLSearchParams({
@@ -149,7 +172,6 @@ const Index = () => {
       </nav>
 
       {/* Hero */}
-      {/* Hero */}
       <section className="relative pt-16 overflow-hidden">
         <div className="absolute inset-0 pt-16">
           <img src={heroCourier} alt="Nation Courier" className="w-full h-full object-cover" />
@@ -158,13 +180,9 @@ const Index = () => {
 
         <div className="relative container mx-auto px-6 md:px-16 lg:px-24 py-24 md:py-36">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-            
+
             {/* Left — Text */}
-            <motion.div
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.7 }}
-            >
+            <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}>
               <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-secondary/20 text-secondary text-sm font-medium mb-6">
                 <Truck className="h-4 w-4" /> Uganda's Trusted Courier
               </span>
@@ -176,30 +194,17 @@ const Index = () => {
                 Fast, reliable courier services with real-time tracking. From documents to bulk shipments — we move it all.
               </p>
               <div className="flex flex-wrap gap-4">
-                <Button
-                  size="lg"
-                  className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-heading font-semibold"
-                  asChild
-                >
+                <Button size="lg" className="bg-secondary text-secondary-foreground hover:bg-secondary/90 font-heading font-semibold" asChild>
                   <Link to="/book">Book a Shipment</Link>
                 </Button>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="border-primary-foreground/30 text-secondary-foreground hover:bg-primary-foreground/10 font-heading"
-                  onClick={() => document.getElementById("track")?.scrollIntoView({ behavior: "smooth" })}
-                >
+                <Button size="lg" variant="outline"
+                  className="border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10 font-heading"
+                  onClick={() => document.getElementById("track")?.scrollIntoView({ behavior: "smooth" })}>
                   Track Parcel
                 </Button>
               </div>
-
-              {/* Quick stats */}
               <div className="flex gap-8 mt-10">
-                {[
-                  { value: "4,000+", label: "Deliveries" },
-                  { value: "3",      label: "Countries"  },
-                  { value: "54",     label: "Riders"     },
-                ].map((stat) => (
+                {[{ value: "4,000+", label: "Deliveries" }, { value: "3", label: "Countries" }, { value: "54", label: "Riders" }].map((stat) => (
                   <div key={stat.label}>
                     <p className="font-heading text-2xl font-bold text-secondary">{stat.value}</p>
                     <p className="text-xs text-primary-foreground/60 mt-0.5">{stat.label}</p>
@@ -209,17 +214,11 @@ const Index = () => {
             </motion.div>
 
             {/* Right — Quote Calculator */}
-            <motion.div
-              id="quote"
-              initial={{ opacity: 0, x: 40 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.7, delay: 0.3 }}
-            >
+            <motion.div id="quote" initial={{ opacity: 0, x: 40 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.7, delay: 0.3 }}>
               <div className="bg-card rounded-2xl p-6 shadow-elevated">
                 <h3 className="font-heading font-semibold text-card-foreground text-lg mb-4 flex items-center gap-2">
                   <Calculator className="h-5 w-5 text-secondary" /> Get an Instant Quote
                 </h3>
-
                 <div className="space-y-3">
                   {/* Vehicle & Weight */}
                   <div className="grid grid-cols-2 gap-3">
@@ -228,9 +227,7 @@ const Index = () => {
                       <Select value={vehicleType} onValueChange={(v) => setVehicleType(v as VehicleType)}>
                         <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Select vehicle" /></SelectTrigger>
                         <SelectContent>
-                          {vehicleOptions.map((v) => (
-                            <SelectItem key={v.value} value={v.value}>{v.label} — {v.desc}</SelectItem>
-                          ))}
+                          {vehicleOptions.map((v) => <SelectItem key={v.value} value={v.value}>{v.label} — {v.desc}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
@@ -341,18 +338,13 @@ const Index = () => {
                     )}
                   </AnimatePresence>
 
-                  {/* Book Now */}
-                  <Button
-                    className="w-full bg-secondary text-secondary-foreground hover:bg-secondary/90 font-heading font-semibold"
-                    disabled={!canBook}
-                    onClick={handleBookNow}
-                  >
+                  <Button className="w-full bg-secondary text-secondary-foreground hover:bg-secondary/90 font-heading font-semibold"
+                    disabled={!canBook} onClick={handleBookNow}>
                     Book Now <ChevronRight className="h-4 w-4 ml-1" />
                   </Button>
                 </div>
               </div>
             </motion.div>
-
           </div>
         </div>
       </section>
@@ -365,7 +357,6 @@ const Index = () => {
             <h2 className="text-3xl md:text-4xl font-heading font-bold text-foreground mb-3">Track Your Parcel</h2>
             <p className="text-muted-foreground">Enter your tracking ID to see real-time delivery status.</p>
           </motion.div>
-
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
             transition={{ delay: 0.1 }} className="max-w-lg mx-auto">
             <div className="flex gap-3 mb-8">
@@ -373,29 +364,11 @@ const Index = () => {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input placeholder="e.g. NC-UG-2026-0001" value={trackingId}
                   onChange={(e) => setTrackingId(e.target.value)}
-                  onKeyDown={async (e) => {
-                    if (e.key === "Enter" && trackingId.trim()) {
-                      setIsTracking(true); setTrackingError(""); setTrackedShipment(null);
-                      const result = await fetchShipmentByTrackingId(trackingId.trim());
-                      if (!result) setTrackingError("No shipment found with that tracking ID.");
-                      else setTrackedShipment(result);
-                      setIsTracking(false);
-                    }
-                  }}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleTrack(); }}
                   className="pl-10 bg-card" />
               </div>
-              <Button
-                className="bg-primary text-primary-foreground hover:bg-primary/90 font-heading font-semibold"
-                disabled={isTracking}
-                onClick={async () => {
-                  if (!trackingId.trim()) return;
-                  setIsTracking(true); setTrackingError(""); setTrackedShipment(null);
-                  const result = await fetchShipmentByTrackingId(trackingId.trim());
-                  if (!result) setTrackingError("No shipment found with that tracking ID.");
-                  else setTrackedShipment(result);
-                  setIsTracking(false);
-                }}
-              >
+              <Button className="bg-primary text-primary-foreground hover:bg-primary/90 font-heading font-semibold"
+                disabled={isTracking} onClick={handleTrack}>
                 {isTracking ? "Searching..." : "Track"}
               </Button>
             </div>
@@ -405,27 +378,25 @@ const Index = () => {
             {trackedShipment ? (
               <div className="bg-card rounded-xl p-6 shadow-card">
                 <div className="space-y-2 mb-6">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Tracking ID</span>
-                    <span className="font-semibold text-foreground">{trackedShipment.tracking_id}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">From</span>
-                    <span className="font-medium">{trackedShipment.origin}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">To</span>
-                    <span className="font-medium">{trackedShipment.destination}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Rider</span>
-                    <span className="font-medium">{trackedShipment.rider ?? "Not yet assigned"}</span>
-                  </div>
+                  {[
+                    { label: "Tracking ID", value: trackedShipment.tracking_id },
+                    { label: "From",        value: trackedShipment.origin },
+                    { label: "To",          value: trackedShipment.destination },
+                    { label: "Rider",       value: trackedShipment.rider ?? "Not yet assigned" },
+                    { label: "Status",      value: trackedShipment.status },
+                  ].map((row) => (
+                    <div key={row.label} className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">{row.label}</span>
+                      <span className="font-medium text-foreground">{row.value}</span>
+                    </div>
+                  ))}
                 </div>
                 <div className="flex items-center justify-between mb-2">
                   {statusSteps.map((step, i) => (
                     <div key={step} className="flex flex-col items-center flex-1">
-                      <div className={`w-4 h-4 rounded-full border-2 ${i <= statusSteps.indexOf(trackedShipment.status) ? "bg-secondary border-secondary" : "bg-muted border-border"}`} />
+                      <div className={`w-4 h-4 rounded-full border-2 ${
+                        i <= statusSteps.indexOf(trackedShipment.status) ? "bg-secondary border-secondary" : "bg-muted border-border"
+                      }`} />
                       <span className="text-[10px] sm:text-xs text-muted-foreground mt-2 text-center leading-tight">{step}</span>
                     </div>
                   ))}

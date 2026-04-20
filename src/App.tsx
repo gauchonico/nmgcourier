@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "@/contexts/AuthContext";
 import Index from "./pages/Index";
 import BookShipment from "./pages/BookShipment";
 import NotFound from "./pages/NotFound";
@@ -17,6 +18,8 @@ import PricingManager from "./pages/admin/PricingManager";
 import RiderProfile from "./pages/admin/RiderProfile";
 import EarningsConfig from "./pages/admin/EarningsConfig";
 import FleetManagement from "./pages/admin/FleetManagement";
+import AreasManager    from "./pages/admin/AreasManage";
+import ShipmentManager from "./pages/admin/ShipmentManager";
 
 const queryClient = new QueryClient();
 
@@ -26,29 +29,33 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/book" element={<BookShipment />} />
-          <Route path="/admin/login" element={<AdminLogin />} />
-          <Route
-            path="/admin"
-            element={
-              <ProtectedRoute>
-                <AdminLayout />
-              </ProtectedRoute>
-            }
-          >
-            <Route index element={<DashboardOverview />} />
-            <Route path="shipments" element={<ShipmentBoard />} />
-            <Route path="riders" element={<RiderManagement />} />
-            <Route path="analytics" element={<AnalyticsPage />} />
-            <Route path="pricing" element={<PricingManager />} />
-            <Route path="riders/:id" element={<RiderProfile />} />
-            <Route path="earnings" element={<EarningsConfig />} />
-            <Route path="fleet" element={<FleetManagement />} />
-          </Route>
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <AuthProvider>
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/book" element={<BookShipment />} />
+            <Route path="/admin/login" element={<AdminLogin />} />
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute>
+                  <AdminLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<DashboardOverview />} />
+              <Route path="shipments" element={<ShipmentBoard />} />
+              <Route path="riders" element={<RiderManagement />} />
+              <Route path="analytics" element={<AnalyticsPage />} />
+              <Route path="pricing" element={<PricingManager />} />
+              <Route path="riders/:id" element={<RiderProfile />} />
+              <Route path="earnings" element={<EarningsConfig />} />
+              <Route path="fleet" element={<FleetManagement />} />
+              <Route path="areas"     element={<AreasManager />} />
+              <Route path="manage"    element={<ShipmentManager />} />
+            </Route>
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

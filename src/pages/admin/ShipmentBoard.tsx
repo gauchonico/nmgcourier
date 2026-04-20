@@ -4,21 +4,12 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { fetchShipments, fetchRiders, updateShipmentStatus, assignRider } from "@/lib/mock-data";
+import { apiGetShipments, apiGetRiders, apiUpdateShipment } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import type { ShipmentStatus, Country } from "@/lib/mock-data";
-import { fetchEarningsConfig, fetchShipmentsByRider, updateRiderEarnings } from "@/lib/mock-data";
 
 const statusColumns: ShipmentStatus[] = ["Pending", "Picked Up", "In Transit", "Out for Delivery", "Delivered"];
-
-const statusColors: Record<ShipmentStatus, string> = {
-  "Pending": "bg-muted text-muted-foreground",
-  "Picked Up": "bg-primary/10 text-primary",
-  "In Transit": "bg-secondary/20 text-secondary-foreground",
-  "Out for Delivery": "bg-secondary text-secondary-foreground",
-  "Delivered": "bg-success/20 text-success",
-};
 
 const countryFlag: Record<Country, string> = {
   Kenya: "🇰🇪", Uganda: "🇺🇬", Tanzania: "🇹🇿",
@@ -27,19 +18,17 @@ const countryFlag: Record<Country, string> = {
 export default function ShipmentBoard() {
   const { toast } = useToast();
   const [shipments, setShipments] = useState<any[]>([]);
-  const [riders, setRiders] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [riders,    setRiders]    = useState<any[]>([]);
+  const [loading,   setLoading]   = useState(true);
   const [countryFilter, setCountryFilter] = useState<string>("all");
-  const [selected, setSelected] = useState<any>(null);
-  const [updating, setUpdating] = useState(false);
-
-  // Panel state
+  const [selected,  setSelected]  = useState<any>(null);
+  const [updating,  setUpdating]  = useState(false);
   const [newStatus, setNewStatus] = useState<ShipmentStatus | "">("");
-  const [newRider, setNewRider] = useState("");
+  const [newRider,  setNewRider]  = useState("");
 
   const load = async () => {
     setLoading(true);
-    const [s, r] = await Promise.all([fetchShipments(), fetchRiders()]);
+    const [s, r] = await Promise.all([apiGetShipments(), apiGetRiders()]);
     setShipments(s);
     setRiders(r);
     setLoading(false);
@@ -63,41 +52,10 @@ export default function ShipmentBoard() {
     if (!selected) return;
     setUpdating(true);
     try {
-      if (newStatus && newStatus !== selected.status) {
-        await updateShipmentStatus(selected.id, newStatus as ShipmentStatus);
-  
-        // Auto-update rider earnings when delivered
-        if (newStatus === "Delivered" && selected.rider) {
-          const [config, allRiders, riderShipments] = await Promise.all([
-            fetchEarningsConfig(),
-            fetchRiders(),
-            fetchShipmentsByRider(selected.rider),
-          ]);
-  
-          const rider = allRiders.find((r: any) => r.name === selected.rider);
-          if (rider && config) {
-            const percentage = config.percentage / 100;
-            // Recalculate total earnings from all delivered shipments
-            const deliveredShipments = riderShipments.filter(
-              (s: any) => s.status === "Delivered" || s.id === selected.id
-            );
-            const totalEarnings = deliveredShipments.reduce(
-              (sum: number, s: any) => sum + (s.price || 0) * percentage, 0
-            );
-            await updateRiderEarnings(
-              rider.id,
-              Math.round(totalEarnings),
-              deliveredShipments.length
-            );
-          }
-        }
-      }
-  
-      if (newRider !== selected.rider) {
-        const riderToAssign = newRider === "unassigned" ? "" : newRider;
-        await assignRider(selected.id, riderToAssign);
-      }
-  
+      await apiUpdateShipment(selected.id, {
+        status: newStatus,
+        rider:  newRider === "unassigned" ? null : newRider,
+      });
       toast({ title: "Shipment updated!", description: `${selected.tracking_id} has been updated.` });
       closePanel();
       await load();
@@ -112,9 +70,11 @@ export default function ShipmentBoard() {
     ? shipments
     : shipments.filter((s) => s.country === countryFilter);
 
-  // Only show available riders matching the shipment's vehicle type
   const eligibleRiders = selected
-    ? riders.filter((r) => r.is_available || r.name === selected.rider)
+    ? riders.filter((r) =>
+        r.country === selected.country &&          // must match shipment's country
+        (!r.on_job || r.name === selected.rider)   // available, OR already assigned to this shipment
+      )
     : [];
 
   return (
@@ -157,13 +117,8 @@ export default function ShipmentBoard() {
                 </div>
                 <div className="space-y-2 min-h-[200px]">
                   {columnShipments.map((s, i) => (
-                    <motion.div
-                      key={s.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.05 }}
-                      onClick={() => openPanel(s)}
-                    >
+                    <motion.div key={s.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.05 }} onClick={() => openPanel(s)}>
                       <Card className="shadow-card hover:shadow-elevated transition-all cursor-pointer hover:border-secondary/50 border border-transparent">
                         <CardContent className="p-3 space-y-2">
                           <div className="flex items-center justify-between">
@@ -199,62 +154,47 @@ export default function ShipmentBoard() {
         </div>
       )}
 
-      {/* Side Panel */}
       <AnimatePresence>
         {selected && (
           <>
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/40 z-40"
-              onClick={closePanel}
-            />
-
-            {/* Panel */}
-            <motion.div
-              initial={{ x: "100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "100%" }}
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/40 z-40" onClick={closePanel} />
+            <motion.div initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="fixed right-0 top-0 h-full w-full max-w-md bg-background shadow-2xl z-50 overflow-y-auto"
-            >
+              className="fixed right-0 top-0 h-full w-full max-w-md bg-background shadow-2xl z-50 overflow-y-auto">
               <div className="p-6 space-y-6">
-                {/* Header */}
                 <div className="flex items-center justify-between">
                   <div>
                     <h2 className="font-heading text-lg font-bold text-foreground">{selected.tracking_id}</h2>
                     <p className="text-xs text-muted-foreground mt-0.5">{selected.origin} → {selected.destination}</p>
                   </div>
-                  <button onClick={closePanel} className="text-muted-foreground hover:text-foreground transition-colors">
+                  <button onClick={closePanel} className="text-muted-foreground hover:text-foreground">
                     <X className="h-5 w-5" />
                   </button>
                 </div>
 
-                {/* Shipment Info */}
                 <div className="bg-muted rounded-lg p-4 space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Sender</span>
-                    <span className="font-medium text-foreground">{selected.sender}</span>
+                    <span className="font-medium">{selected.sender}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Receiver</span>
-                    <span className="font-medium text-foreground">{selected.receiver}</span>
+                    <span className="font-medium">{selected.receiver}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Weight</span>
-                    <span className="font-medium text-foreground">{selected.weight} kg</span>
+                    <span className="font-medium">{selected.weight} kg</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Price</span>
-                    <span className="font-medium text-secondary">{selected.price?.toLocaleString()}</span>
+                    <span className="font-medium text-secondary">{parseFloat(selected.price).toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Booked</span>
-                    <span className="font-medium text-foreground">{selected.created_at}</span>
+                    <span className="font-medium">{selected.created_at}</span>
                   </div>
-                  {selected.is_cross_border && (
+                  {selected.is_cross_border == 1 && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Type</span>
                       <Badge variant="secondary" className="text-[10px]">🌍 Cross-border</Badge>
@@ -262,63 +202,40 @@ export default function ShipmentBoard() {
                   )}
                 </div>
 
-                {/* Update Status */}
                 <div className="space-y-2">
                   <label className="text-sm font-semibold text-foreground">Update Status</label>
                   <Select value={newStatus} onValueChange={(v) => setNewStatus(v as ShipmentStatus)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select status" />
-                    </SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
                     <SelectContent>
                       {statusColumns.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          <span className={`inline-flex items-center gap-2`}>
-                            {s}
-                          </span>
-                        </SelectItem>
+                        <SelectItem key={s} value={s}>{s}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
 
-                {/* Assign Rider */}
                 <div className="space-y-2">
                   <label className="text-sm font-semibold text-foreground flex items-center gap-2">
                     <UserCheck className="h-4 w-4 text-secondary" /> Assign Rider
                   </label>
                   <Select value={newRider} onValueChange={setNewRider}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a rider" />
-                    </SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Select a rider" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="unassigned">— Unassigned —</SelectItem>
                       {eligibleRiders.map((r) => (
                         <SelectItem key={r.id} value={r.name}>
-                          <span className="flex items-center gap-2">
-                            {r.name}
-                            <span className="text-xs text-muted-foreground">({r.vehicle} · {r.city})</span>
-                            {r.is_available
-                              ? <span className="text-xs text-success">● Available</span>
-                              : <span className="text-xs text-muted-foreground">● On job</span>
-                            }
-                          </span>
+                          {r.name} ({r.vehicle} · {r.city})
+                          {r.on_job ? " ● On Job" : " ● Available"}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">Only showing available riders</p>
                 </div>
 
-                {/* Actions */}
                 <div className="flex gap-3 pt-2">
-                  <Button variant="outline" className="flex-1" onClick={closePanel}>
-                    Cancel
-                  </Button>
-                  <Button
-                    className="flex-1 bg-secondary text-secondary-foreground hover:bg-secondary/90 font-heading font-semibold"
-                    onClick={handleUpdate}
-                    disabled={updating}
-                  >
+                  <Button variant="outline" className="flex-1" onClick={closePanel}>Cancel</Button>
+                  <Button className="flex-1 bg-secondary text-secondary-foreground hover:bg-secondary/90 font-heading font-semibold"
+                    onClick={handleUpdate} disabled={updating}>
                     {updating ? "Saving..." : "Save Changes"}
                   </Button>
                 </div>

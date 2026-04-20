@@ -5,8 +5,10 @@ import { ChevronLeft, Phone, MapPin, Star, Package, Truck, TrendingUp, Clock, Ch
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { fetchRiderById, fetchShipmentsByRider, fetchEarningsConfig } from "@/lib/mock-data";
-import type { Country, ShipmentStatus } from "@/lib/mock-data";
+import { apiGetRider, apiGetEarningsConfig } from "@/lib/api";
+
+type Country      = "Kenya" | "Uganda" | "Tanzania";
+type ShipmentStatus = "Pending" | "Picked Up" | "In Transit" | "Out for Delivery" | "Delivered";
 
 const countryFlag: Record<Country, string> = {
   Kenya: "🇰🇪", Uganda: "🇺🇬", Tanzania: "🇹🇿",
@@ -21,25 +23,22 @@ const statusColors: Record<ShipmentStatus, string> = {
 };
 
 export default function RiderProfile() {
-  const { id } = useParams();
+  const { id }   = useParams();
   const navigate = useNavigate();
-  const [rider, setRider] = useState<any>(null);
+  const [rider,     setRider]     = useState<any>(null);
   const [shipments, setShipments] = useState<any[]>([]);
-  const [config, setConfig] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [config,    setConfig]    = useState<any>(null);
+  const [loading,   setLoading]   = useState(true);
 
   useEffect(() => {
     if (!id) return;
     const load = async () => {
-      const r = await fetchRiderById(id);
-      if (!r) { setLoading(false); return; }
-      const [s, c] = await Promise.all([
-        fetchShipmentsByRider(r.name),
-        fetchEarningsConfig(),
-      ]);
-      setRider(r);
-      setShipments(s);
-      setConfig(c);
+      const data = await apiGetRider(id);
+      if (!data) { setLoading(false); return; }
+      const cfg = await apiGetEarningsConfig();
+      setRider(data.rider);
+      setShipments(data.shipments || []);
+      setConfig(cfg);
       setLoading(false);
     };
     load();
@@ -60,24 +59,22 @@ export default function RiderProfile() {
     </div>
   );
 
-  const delivered = shipments.filter((s) => s.status === "Delivered");
-  const inProgress = shipments.filter((s) => s.status !== "Delivered");
-  const totalRevenue = delivered.reduce((sum, s) => sum + (s.price || 0), 0);
-  const earningsPct = config?.percentage || 20;
-  const calculatedEarnings = Math.round(totalRevenue * (earningsPct / 100));
+  const delivered       = shipments.filter((s) => s.status === "Delivered");
+  const inProgress      = shipments.filter((s) => s.status !== "Delivered");
+  const totalRevenue    = delivered.reduce((sum, s) => sum + (parseFloat(s.price) || 0), 0);
+  const earningsPct     = parseFloat(config?.percentage) || 20;
+  const calcEarnings    = Math.round(totalRevenue * (earningsPct / 100));
 
-  // This month's shipments
-  const thisMonth = new Date().toISOString().slice(0, 7);
+  const thisMonth          = new Date().toISOString().slice(0, 7);
   const thisMonthShipments = delivered.filter((s) => s.created_at?.slice(0, 7) === thisMonth);
-  const thisMonthEarnings = Math.round(
-    thisMonthShipments.reduce((sum, s) => sum + (s.price || 0), 0) * (earningsPct / 100)
+  const thisMonthEarnings  = Math.round(
+    thisMonthShipments.reduce((sum, s) => sum + (parseFloat(s.price) || 0), 0) * (earningsPct / 100)
   );
 
   const VIcon = rider.vehicle === "Bike" ? Bike : Truck;
 
   return (
     <div className="space-y-6">
-      {/* Back button */}
       <Button variant="ghost" size="sm" onClick={() => navigate("/admin/riders")} className="gap-1 text-muted-foreground">
         <ChevronLeft className="h-4 w-4" /> Back to Riders
       </Button>
@@ -87,14 +84,11 @@ export default function RiderProfile() {
         <Card className="shadow-card">
           <CardContent className="p-6">
             <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-              {/* Avatar */}
               <div className="w-16 h-16 rounded-full bg-secondary/10 flex items-center justify-center shrink-0">
                 <span className="font-heading text-2xl font-bold text-secondary">
                   {rider.name.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
                 </span>
               </div>
-
-              {/* Info */}
               <div className="flex-1">
                 <div className="flex flex-wrap items-center gap-2 mb-1">
                   <h1 className="font-heading text-2xl font-bold text-foreground">{rider.name}</h1>
@@ -103,18 +97,10 @@ export default function RiderProfile() {
                   </Badge>
                 </div>
                 <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-                  <span className="flex items-center gap-1.5">
-                    <Phone className="h-3.5 w-3.5" /> {rider.phone}
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <MapPin className="h-3.5 w-3.5" /> {countryFlag[rider.country as Country]} {rider.city}
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <VIcon className="h-3.5 w-3.5" /> {rider.vehicle}
-                  </span>
-                  <span className="flex items-center gap-1.5">
-                    <Star className="h-3.5 w-3.5 text-secondary fill-secondary" /> {rider.rating}
-                  </span>
+                  <span className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5" /> {rider.phone}</span>
+                  <span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5" /> {countryFlag[rider.country as Country]} {rider.city}</span>
+                  <span className="flex items-center gap-1.5"><VIcon className="h-3.5 w-3.5" /> {rider.vehicle}</span>
+                  <span className="flex items-center gap-1.5"><Star className="h-3.5 w-3.5 text-secondary fill-secondary" /> {rider.rating}</span>
                 </div>
               </div>
             </div>
@@ -122,13 +108,13 @@ export default function RiderProfile() {
         </Card>
       </motion.div>
 
-      {/* Stats Grid */}
+      {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: "Total Deliveries", value: delivered.length, icon: CheckCircle2, color: "text-success" },
-          { label: "In Progress",      value: inProgress.length, icon: Clock,        color: "text-primary" },
-          { label: "Total Earnings",   value: `${calculatedEarnings.toLocaleString()}`, icon: TrendingUp, color: "text-secondary" },
-          { label: "This Month",       value: `${thisMonthEarnings.toLocaleString()}`,  icon: Package,    color: "text-secondary" },
+          { label: "Total Deliveries", value: delivered.length,                    icon: CheckCircle2, color: "text-success"   },
+          { label: "In Progress",      value: inProgress.length,                   icon: Clock,        color: "text-primary"   },
+          { label: "Total Earnings",   value: calcEarnings.toLocaleString(),        icon: TrendingUp,   color: "text-secondary" },
+          { label: "This Month",       value: thisMonthEarnings.toLocaleString(),   icon: Package,      color: "text-secondary" },
         ].map((stat, i) => (
           <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }}>
             <Card className="shadow-card">
@@ -149,9 +135,7 @@ export default function RiderProfile() {
             <CardTitle className="text-lg flex items-center gap-2">
               <TrendingUp className="h-5 w-5 text-secondary" /> Earnings Breakdown
             </CardTitle>
-            <CardDescription>
-              Rider earns <strong>{earningsPct}%</strong> of each delivered shipment's price
-            </CardDescription>
+            <CardDescription>Rider earns <strong>{earningsPct}%</strong> of each delivered shipment's price</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -162,7 +146,7 @@ export default function RiderProfile() {
               </div>
               <div className="bg-muted/50 rounded-lg p-4 space-y-1">
                 <p className="text-xs text-muted-foreground">Rider's Cut ({earningsPct}%)</p>
-                <p className="font-heading text-lg font-bold text-secondary">{calculatedEarnings.toLocaleString()}</p>
+                <p className="font-heading text-lg font-bold text-secondary">{calcEarnings.toLocaleString()}</p>
                 <p className="text-xs text-muted-foreground">total earned</p>
               </div>
               <div className="bg-muted/50 rounded-lg p-4 space-y-1">
@@ -191,16 +175,11 @@ export default function RiderProfile() {
               <div className="divide-y divide-border">
                 {shipments.map((s, i) => {
                   const riderEarning = s.status === "Delivered"
-                    ? Math.round((s.price || 0) * (earningsPct / 100))
+                    ? Math.round((parseFloat(s.price) || 0) * (earningsPct / 100))
                     : null;
                   return (
-                    <motion.div
-                      key={s.id}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ delay: i * 0.04 }}
-                      className="flex items-center justify-between px-6 py-3 hover:bg-muted/30 transition-colors"
-                    >
+                    <motion.div key={s.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.04 }}
+                      className="flex items-center justify-between px-6 py-3 hover:bg-muted/30 transition-colors">
                       <div className="flex items-center gap-3">
                         <div className="h-8 w-8 rounded-md bg-muted flex items-center justify-center text-xs">
                           {s.country === "Kenya" ? "🇰🇪" : s.country === "Uganda" ? "🇺🇬" : "🇹🇿"}
@@ -213,7 +192,7 @@ export default function RiderProfile() {
                       </div>
                       <div className="flex items-center gap-3 text-right">
                         <div>
-                          <p className="text-sm font-medium text-foreground">{(s.price || 0).toLocaleString()}</p>
+                          <p className="text-sm font-medium text-foreground">{(parseFloat(s.price) || 0).toLocaleString()}</p>
                           {riderEarning !== null && (
                             <p className="text-xs text-secondary font-medium">+{riderEarning.toLocaleString()} earned</p>
                           )}
